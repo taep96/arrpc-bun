@@ -4,6 +4,7 @@ import {
 	DEFAULT_LOCALHOST,
 	ENV_DEBUG,
 	ENV_WEBSOCKET_HOST,
+	getAppNameById,
 	RPC_PROTOCOL_VERSION,
 	WEBSOCKET_COLOR,
 	WEBSOCKET_PORT_RANGE,
@@ -160,7 +161,7 @@ export default class WSServer {
 		return this.server?.port;
 	}
 
-	onConnection(ws: ServerWebSocket<WSData>): void {
+	async onConnection(ws: ServerWebSocket<WSData>): Promise<void> {
 		const extSocket = ws as unknown as ExtendedWebSocket;
 		const { clientId, encoding } = ws.data;
 
@@ -175,6 +176,7 @@ export default class WSServer {
 
 		extSocket.clientId = clientId;
 		extSocket.encoding = encoding;
+		extSocket.clientName = await getAppNameById(clientId);
 
 		extSocket.send = (msg: RPCMessage | string) => {
 			if (env[ENV_DEBUG]) log.info("sending", msg);

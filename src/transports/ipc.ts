@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { env, file } from "bun";
 import {
 	ENV_DEBUG,
+	getAppNameById,
 	IPC_COLOR,
 	IPC_HEADER_SIZE,
 	IPC_MAX_RETRIES,
@@ -229,7 +230,7 @@ export default class IPCServer {
 
 		socket.once(
 			"handshake",
-			(params: { v?: string; client_id?: string }) => {
+			async (params: { v?: string; client_id?: string }) => {
 				if (env[ENV_DEBUG]) log.info("handshake:", params);
 
 				const ver = Number.parseInt(
@@ -299,6 +300,7 @@ export default class IPCServer {
 				};
 
 				extSocket.clientId = clientId;
+				extSocket.clientName = await getAppNameById(clientId);
 
 				this.handlers.connection(extSocket);
 			},

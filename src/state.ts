@@ -1,6 +1,7 @@
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { env, file, write } from "bun";
+import { env } from "bun";
 import {
 	ENV_DEBUG,
 	STATE_COLOR,
@@ -26,16 +27,17 @@ class StateManager {
 	private writeDebounceTimer: Timer | null = null;
 	private readonly DEBOUNCE_MS = 100;
 
-	async initialize(): Promise<void> {
+	initialize(): void {
 		const tempDir = tmpdir();
 
 		for (let i = 0; i <= STATE_FILE_MAX_INDEX; i++) {
 			const path = join(tempDir, `${STATE_FILE_PREFIX}-${i}`);
-			const f = file(path);
 
-			if (await f.exists()) {
+			if (existsSync(path)) {
 				try {
-					const content = (await f.json()) as StateFileContent;
+					const content = JSON.parse(
+						readFileSync(path, "utf-8"),
+					) as StateFileContent;
 					const age = Date.now() - content.timestamp;
 					if (age > 10000) {
 						this.stateFilePath = path;
@@ -100,7 +102,7 @@ class StateManager {
 		}, this.DEBOUNCE_MS);
 	}
 
-	private async writeToFile(): Promise<void> {
+	private writeToFile(): void {
 		if (!this.stateFilePath) return;
 
 		const content: StateFileContent = {
@@ -129,7 +131,11 @@ class StateManager {
 		}
 
 		try {
-			await write(this.stateFilePath, JSON.stringify(content, null, 2));
+			writeFileSync(
+				this.stateFilePath,
+				JSON.stringify(content, null, 2),
+				"utf-8",
+			);
 			if (env[ENV_DEBUG]) {
 				log.info(
 					`wrote state file: ${content.activities.length} activities`,
@@ -140,16 +146,18 @@ class StateManager {
 		}
 	}
 
-	async cleanup(): Promise<void> {
+	cleanup(): void {
 		if (this.writeDebounceTimer) {
 			clearTimeout(this.writeDebounceTimer);
 		}
 		if (!this.stateFilePath) return;
 
 		try {
-			await file(this.stateFilePath).unlink();
-			if (env[ENV_DEBUG]) {
-				log.info("cleaned up state file");
+			if (existsSync(this.stateFilePath)) {
+				unlinkSync(this.stateFilePath);
+				if (env[ENV_DEBUG]) {
+					log.info("cleaned up state file");
+				}
 			}
 		} catch (error) {
 			log.info(`failed to cleanup state file: ${error}`);

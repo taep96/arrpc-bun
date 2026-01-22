@@ -6,6 +6,7 @@ export interface ExtendedSocket extends NetSocket {
 	_send?: (msg: RPCMessage) => void;
 	close?: (code?: number, message?: string) => void;
 	clientId?: string;
+	clientName?: string;
 	encoding?: string;
 	socketId?: number;
 	lastPid?: number;
@@ -15,6 +16,7 @@ export interface ExtendedSocket extends NetSocket {
 export interface ExtendedWebSocket {
 	send: (msg: RPCMessage | string) => void;
 	clientId?: string;
+	clientName?: string;
 	encoding?: string;
 	socketId?: number;
 	lastPid?: number;

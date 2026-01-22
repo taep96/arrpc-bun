@@ -35,7 +35,7 @@ if (process.argv.includes(CLI_ARG_LIST_DETECTED)) {
 
 log.info(`arRPC-Bun v${version}`);
 stateManager.setAppVersion(version);
-await stateManager.initialize();
+stateManager.initialize();
 
 const ignoreListFile = env[ENV_IGNORE_LIST_FILE];
 if (ignoreListFile) {
@@ -110,9 +110,9 @@ if (env[ENV_PARENT_MONITOR]) {
 	}, 2000);
 }
 
-const shutdown = async () => {
+const shutdown = () => {
 	log.info("received shutdown signal");
-	await stateManager.cleanup();
+	stateManager.cleanup();
 	server.shutdown();
 	process.exit(0);
 };

@@ -19,6 +19,50 @@ export async function getDetectableDb() {
 	return embeddedDetectable;
 }
 
+const appNameCache = new Map<string, string | null>();
+
+async function fetchAppNameFromDiscord(
+	appId: string,
+): Promise<string | undefined> {
+	try {
+		const response = await fetch(
+			`https://discord.com/api/v10/applications/${appId}/rpc`,
+		);
+		if (!response.ok) return undefined;
+
+		const data = (await response.json()) as { name?: string };
+		return data.name;
+	} catch {
+		return undefined;
+	}
+}
+
+export async function getAppNameById(
+	appId: string,
+): Promise<string | undefined> {
+	if (appNameCache.has(appId)) {
+		return appNameCache.get(appId) ?? undefined;
+	}
+
+	const db = (await getDetectableDb()) as Array<{ id: string; name: string }>;
+	for (const app of db) {
+		if (app.id === appId) {
+			appNameCache.set(appId, app.name);
+			return app.name;
+		}
+	}
+
+	// Fallback: fetch from Discord API
+	const name = await fetchAppNameFromDiscord(appId);
+	if (name) {
+		appNameCache.set(appId, name);
+		return name;
+	}
+
+	appNameCache.set(appId, null);
+	return undefined;
+}
+
 export async function getCustomDb() {
 	const dataDir = process.env.ARRPC_DATA_DIR;
 	if (dataDir) {
