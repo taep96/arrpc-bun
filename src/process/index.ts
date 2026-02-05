@@ -358,7 +358,10 @@ export default class ProcessServer {
 
 					for (const id of cachedResults) {
 						const state = this.gameState.get(id);
-						const name = state?.name;
+
+						const name =
+							state?.name ??
+							DetectableDB.find((app) => app.id === id)?.name;
 						if (!name) continue;
 
 						const shouldIgnore = ignoreList.shouldIgnore(
