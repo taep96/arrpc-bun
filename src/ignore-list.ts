@@ -62,8 +62,8 @@ class IgnoreListManager {
 		while (this.pendingOperation) {
 			await this.pendingOperation;
 		}
-		let resolve: () => void;
-		this.pendingOperation = new Promise((r) => {
+		let resolve: (() => void) | undefined;
+		this.pendingOperation = new Promise<void>((r) => {
 			resolve = r;
 		});
 		try {
