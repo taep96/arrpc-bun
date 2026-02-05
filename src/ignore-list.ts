@@ -7,6 +7,7 @@ const log = createLogger("ignore-list", ...IGNORE_LIST_COLOR);
 class IgnoreListManager {
 	private ignoreSet: Set<string> = new Set();
 	private filePath: string | null = null;
+	private pendingOperation: Promise<void> | null = null;
 
 	async initialize(filePath?: string): Promise<void> {
 		if (filePath) {
@@ -38,7 +39,7 @@ class IgnoreListManager {
 				log.info(`loaded ${this.ignoreSet.size} entries from file`);
 			}
 		} catch (error) {
-			log.info("failed to load from file:", error);
+			log.error("failed to load from file:", error);
 		}
 	}
 
@@ -49,7 +50,7 @@ class IgnoreListManager {
 			const games = Array.from(this.ignoreSet);
 			await write(this.filePath, JSON.stringify(games, null, 2));
 		} catch (error) {
-			log.info("failed to save to file:", error);
+			log.error("failed to save to file:", error);
 		}
 	}
 
@@ -57,27 +58,49 @@ class IgnoreListManager {
 		return value.toLowerCase().trim();
 	}
 
-	async add(games: string[]): Promise<void> {
-		for (const game of games) {
-			if (game && typeof game === "string") {
-				this.ignoreSet.add(this.normalize(game));
-			}
+	private async withLock<T>(operation: () => Promise<T>): Promise<T> {
+		while (this.pendingOperation) {
+			await this.pendingOperation;
 		}
-		await this.saveToFile();
+		let resolve: () => void;
+		this.pendingOperation = new Promise((r) => {
+			resolve = r;
+		});
+		try {
+			return await operation();
+		} finally {
+			this.pendingOperation = null;
+			resolve?.();
+		}
+	}
+
+	async add(games: string[]): Promise<void> {
+		return this.withLock(async () => {
+			for (const game of games) {
+				if (game && typeof game === "string") {
+					this.ignoreSet.add(this.normalize(game));
+				}
+			}
+			await this.saveToFile();
+		});
 	}
 
 	async remove(games: string[]): Promise<void> {
-		for (const game of games) {
-			if (game && typeof game === "string") {
-				this.ignoreSet.delete(this.normalize(game));
+		return this.withLock(async () => {
+			for (const game of games) {
+				if (game && typeof game === "string") {
+					this.ignoreSet.delete(this.normalize(game));
+				}
 			}
-		}
-		await this.saveToFile();
+			await this.saveToFile();
+		});
 	}
 
 	async clear(): Promise<void> {
-		this.ignoreSet.clear();
-		await this.saveToFile();
+		return this.withLock(async () => {
+			this.ignoreSet.clear();
+			await this.saveToFile();
+		});
 	}
 
 	getAll(): string[] {
@@ -93,15 +116,20 @@ class IgnoreListManager {
 			return { success: false, error: "No file configured" };
 		}
 
-		try {
-			await this.loadFromFile();
-			return { success: true, count: this.ignoreSet.size };
-		} catch (error) {
-			return {
-				success: false,
-				error: error instanceof Error ? error.message : "Unknown error",
-			};
-		}
+		return this.withLock(async () => {
+			try {
+				await this.loadFromFile();
+				return { success: true, count: this.ignoreSet.size };
+			} catch (error) {
+				return {
+					success: false,
+					error:
+						error instanceof Error
+							? error.message
+							: "Unknown error",
+				};
+			}
+		});
 	}
 
 	shouldIgnore(

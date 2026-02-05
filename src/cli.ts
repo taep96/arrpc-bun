@@ -215,10 +215,18 @@ export async function listDetected(): Promise<void> {
 	displayDetectedGamesFromMap(detected);
 }
 
-function displayDetectedGames(stateFile: StateFileContent): void {
+interface GameDisplayInfo {
+	name: string;
+	appId: string | undefined;
+	pid: number;
+	socketId: string;
+	startTime: number | null | undefined;
+}
+
+function displayDetectedGamesList(games: GameDisplayInfo[]): void {
 	print("\nCurrently detected games:\n");
 
-	if (stateFile.activities.length === 0) {
+	if (games.length === 0) {
 		print("  No games currently detected.");
 		print(
 			"\n  Tip: Start a game and run this command again to see it detected.",
@@ -226,52 +234,48 @@ function displayDetectedGames(stateFile: StateFileContent): void {
 		return;
 	}
 
-	for (let i = 0; i < stateFile.activities.length; i++) {
-		const activity = stateFile.activities[i];
-		if (!activity) continue;
+	for (let i = 0; i < games.length; i++) {
+		const game = games[i];
+		if (!game) continue;
 
-		print(`  ${i + 1}. ${activity.name}`);
-		print(`     App ID: ${activity.applicationId}`);
-		print(`     PID: ${activity.pid}`);
-		print(`     Socket: ${activity.socketId}`);
-		if (activity.startTime) {
-			print(`     Duration: ${formatDuration(activity.startTime)}`);
+		print(`  ${i + 1}. ${game.name}`);
+		print(`     App ID: ${game.appId}`);
+		print(`     PID: ${game.pid}`);
+		print(`     Socket: ${game.socketId}`);
+		if (game.startTime) {
+			print(`     Duration: ${formatDuration(game.startTime)}`);
 		}
 		print("");
 	}
 }
 
+function displayDetectedGames(stateFile: StateFileContent): void {
+	const games: GameDisplayInfo[] = stateFile.activities.map((activity) => ({
+		name: activity.name,
+		appId: activity.applicationId,
+		pid: activity.pid,
+		socketId: activity.socketId,
+		startTime: activity.startTime,
+	}));
+	displayDetectedGamesList(games);
+}
+
 function displayDetectedGamesFromMap(
 	detected: Map<string, ActivityPayload>,
 ): void {
-	print("\nCurrently detected games:\n");
+	const games: GameDisplayInfo[] = [];
+	for (const [socketId, payload] of detected) {
+		const { activity, pid } = payload;
+		if (!activity) continue;
 
-	if (detected.size === 0) {
-		print("  No games currently detected.");
-		print(
-			"\n  Tip: Start a game and run this command again to see it detected.",
-		);
-	} else {
-		let index = 1;
-		for (const [socketId, payload] of detected) {
-			const { activity, pid } = payload;
-			if (!activity) continue;
-
-			const name = (activity as { name?: string }).name || "Unknown";
-			const appId = (activity as { application_id?: string })
-				.application_id;
-			const startTime = (activity as { timestamps?: { start?: number } })
-				.timestamps?.start;
-
-			print(`  ${index}. ${name}`);
-			print(`     App ID: ${appId}`);
-			print(`     PID: ${pid}`);
-			print(`     Socket: ${socketId}`);
-			if (startTime) {
-				print(`     Duration: ${formatDuration(startTime)}`);
-			}
-			print("");
-			index++;
-		}
+		games.push({
+			name: (activity as { name?: string }).name || "Unknown",
+			appId: (activity as { application_id?: string }).application_id,
+			pid: pid ?? 0,
+			socketId,
+			startTime: (activity as { timestamps?: { start?: number } })
+				.timestamps?.start,
+		});
 	}
+	displayDetectedGamesList(games);
 }

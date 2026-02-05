@@ -3,7 +3,6 @@ import type { RPCMessage } from "./rpc.d.ts";
 
 export interface ExtendedSocket extends NetSocket {
 	send?: (msg: RPCMessage) => void;
-	_send?: (msg: RPCMessage) => void;
 	close?: (code?: number, message?: string) => void;
 	clientId?: string;
 	clientName?: string;

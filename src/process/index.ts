@@ -114,7 +114,7 @@ async function loadDatabase(onComplete?: () => void): Promise<void> {
 			onComplete();
 		}
 	} catch (error) {
-		log.info("failed to load database:", error);
+		log.error("failed to load database:", error);
 	}
 }
 
@@ -264,11 +264,82 @@ export default class ProcessServer {
 		this.pathVariationsCache.set(normalizedPath, toCompare);
 
 		if (this.pathVariationsCache.size > 1000) {
-			this.pathVariationsCache.clear();
-			this.pathVariationsCache.set(normalizedPath, toCompare);
+			const firstKey = this.pathVariationsCache.keys().next().value;
+			if (firstKey) this.pathVariationsCache.delete(firstKey);
 		}
 
 		return toCompare;
+	}
+
+	private handleDetectedGame(
+		id: string,
+		name: string,
+		pid: number,
+		_path: string,
+		processedInThisScan: Set<string>,
+		matchSource: string,
+	): "ignored" | "already_processed" | "processed" {
+		const shouldIgnore = ignoreList.shouldIgnore(id, _path, name);
+
+		if (shouldIgnore) {
+			if (env[ENV_DEBUG] && !this.ignoredGames.has(id)) {
+				log.info("ignoring game:", name);
+			}
+			this.ignoredGames.add(id);
+			return "ignored";
+		}
+
+		this.ignoredGames.delete(id);
+
+		if (processedInThisScan.has(id)) {
+			return "already_processed";
+		}
+		processedInThisScan.add(id);
+
+		const state = this.gameState.get(id);
+		const isNewDetection = !state;
+		const oldPid = state?.pid;
+		const pidChanged = oldPid !== pid;
+
+		if (isNewDetection || pidChanged) {
+			if (isNewDetection) {
+				log.info("detected game!", name);
+				if (env[ENV_DEBUG]) {
+					log.info(`  game id: ${id}`);
+					log.info(`  process pid: ${pid}`);
+					log.info(`  process path: ${_path}`);
+					log.info(`  matched: ${name} ${matchSource}`);
+				}
+			} else if (pidChanged) {
+				log.info("game restarted!", name);
+				if (env[ENV_DEBUG]) {
+					log.info(`  old PID: ${oldPid}`);
+					log.info(`  new PID: ${pid}`);
+				}
+			}
+
+			const newTimestamp = Date.now();
+			this.gameState.set(id, {
+				name,
+				pid,
+				timestamp: newTimestamp,
+			});
+
+			this.handlers.activity(
+				id,
+				{
+					application_id: id,
+					name,
+					timestamps: {
+						start: newTimestamp,
+					},
+				},
+				pid,
+				name,
+			);
+		}
+
+		return "processed";
 	}
 
 	private getCandidateApps(pathVariations: string[]): DetectableApp[] {
@@ -358,81 +429,19 @@ export default class ProcessServer {
 
 					for (const id of cachedResults) {
 						const state = this.gameState.get(id);
-
 						const name =
 							state?.name ??
 							DetectableDB.find((app) => app.id === id)?.name;
 						if (!name) continue;
 
-						const shouldIgnore = ignoreList.shouldIgnore(
+						this.handleDetectedGame(
 							id,
-							_path,
 							name,
+							pid,
+							_path,
+							processedInThisScan,
+							"(from cache)",
 						);
-
-						if (shouldIgnore) {
-							if (env[ENV_DEBUG] && !this.ignoredGames.has(id)) {
-								log.info("ignoring game:", name);
-							}
-							this.ignoredGames.add(id);
-							continue;
-						}
-
-						this.ignoredGames.delete(id);
-
-						if (processedInThisScan.has(id)) {
-							continue;
-						}
-						processedInThisScan.add(id);
-
-						const isNewDetection = !state;
-						const oldPid = state?.pid;
-						const pidChanged = oldPid !== pid;
-
-						if (isNewDetection || pidChanged) {
-							const timestamp = isNewDetection
-								? Date.now()
-								: (state?.timestamp ?? Date.now());
-
-							if (isNewDetection) {
-								log.info("detected game!", name);
-								if (env[ENV_DEBUG]) {
-									log.info(`  game id: ${id}`);
-									log.info(`  process pid: ${pid}`);
-									log.info(`  process path: ${_path}`);
-									log.info(`  matched: ${name} (from cache)`);
-								}
-							} else if (pidChanged) {
-								log.info("game restarted!", name);
-								if (env[ENV_DEBUG]) {
-									log.info(`  old PID: ${oldPid}`);
-									log.info(`  new PID: ${pid}`);
-								}
-							}
-
-							const newTimestamp =
-								isNewDetection || pidChanged
-									? Date.now()
-									: timestamp;
-							this.gameState.set(id, {
-								name,
-								pid,
-								timestamp: newTimestamp,
-							});
-
-							this.handlers.activity(
-								id,
-								{
-									application_id: id,
-									name,
-									timestamps: {
-										start: newTimestamp,
-									},
-								},
-								pid,
-								name,
-							);
-						}
 					}
 					continue;
 				}
@@ -511,74 +520,16 @@ export default class ProcessServer {
 					if (matched) {
 						matchedIds.push(id);
 
-						const shouldIgnore = ignoreList.shouldIgnore(
+						this.handleDetectedGame(
 							id,
-							_path,
 							name,
+							pid,
+							_path,
+							processedInThisScan,
+							"(in path variations)",
 						);
 
-						if (shouldIgnore) {
-							if (env[ENV_DEBUG] && !this.ignoredGames.has(id)) {
-								log.info("ignoring game:", name);
-							}
-							this.ignoredGames.add(id);
-							ids.add(id);
-							break;
-						}
-
-						this.ignoredGames.delete(id);
 						ids.add(id);
-
-						if (processedInThisScan.has(id)) {
-							break;
-						}
-						processedInThisScan.add(id);
-
-						const state = this.gameState.get(id);
-						const isNewDetection = !state;
-						const oldPid = state?.pid;
-						const pidChanged = oldPid !== pid;
-
-						if (isNewDetection || pidChanged) {
-							if (isNewDetection) {
-								log.info("detected game!", name);
-								if (env[ENV_DEBUG]) {
-									log.info(`  game id: ${id}`);
-									log.info(`  process pid: ${pid}`);
-									log.info(`  process path: ${_path}`);
-									log.info(
-										`  matched: ${name} in path variations`,
-									);
-								}
-							} else if (pidChanged) {
-								log.info("game restarted!", name);
-								if (env[ENV_DEBUG]) {
-									log.info(`  old PID: ${oldPid}`);
-									log.info(`  new PID: ${pid}`);
-								}
-							}
-
-							const newTimestamp = Date.now();
-							this.gameState.set(id, {
-								name,
-								pid,
-								timestamp: newTimestamp,
-							});
-
-							this.handlers.activity(
-								id,
-								{
-									application_id: id,
-									name,
-									timestamps: {
-										start: newTimestamp,
-									},
-								},
-								pid,
-								name,
-							);
-						}
-
 						break;
 					}
 				}
@@ -589,7 +540,8 @@ export default class ProcessServer {
 			}
 
 			if (this.scanResultsCache.size > 500) {
-				this.scanResultsCache.clear();
+				const firstKey = this.scanResultsCache.keys().next().value;
+				if (firstKey) this.scanResultsCache.delete(firstKey);
 			}
 
 			for (const cachedPid of this.pathCache.keys()) {

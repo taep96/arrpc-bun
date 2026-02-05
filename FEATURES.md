@@ -113,10 +113,10 @@ Complete feature overview of arRPC-Bun implementation.
   - Debug logging (`ARRPC_DEBUG`)
   - Disable Steam support (`ARRPC_NO_STEAM`)
   - Custom data directory
-  - State file export (`/tmp/arrpc-state.json`)
+  - State file export (`/tmp/arrpc-state-{0-9}`)
   - Ignore list with file persistence
 
-###  
+### Process Management
 - Parent process monitoring
 - Graceful shutdown handling
 - Automatic restart detection

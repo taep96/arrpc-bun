@@ -142,7 +142,7 @@ class StateManager {
 				);
 			}
 		} catch (error) {
-			log.info(`failed to write state file: ${error}`);
+			log.error(`failed to write state file: ${error}`);
 		}
 	}
 
@@ -160,7 +160,7 @@ class StateManager {
 				}
 			}
 		} catch (error) {
-			log.info(`failed to cleanup state file: ${error}`);
+			log.error(`failed to cleanup state file: ${error}`);
 		}
 	}
 }

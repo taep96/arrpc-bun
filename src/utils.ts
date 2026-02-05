@@ -35,3 +35,38 @@ export function getPortRange(
 ): [number, number] {
 	return useHyperV ? hyperVRange : normalRange;
 }
+
+export interface PortBindOptions<T> {
+	portRange: [number, number];
+	startPort?: number;
+	tryBind: (port: number) => T;
+	onPortInUse?: (port: number) => void;
+	serverName: string;
+}
+
+export function tryBindToPort<T>(options: PortBindOptions<T>): {
+	server: T;
+	port: number;
+} {
+	const { portRange, startPort, tryBind, onPortInUse, serverName } = options;
+	let port = startPort ?? portRange[0];
+
+	while (port <= portRange[1]) {
+		try {
+			const server = tryBind(port);
+			return { server, port };
+		} catch (e) {
+			const error = e as { code?: string };
+			if (error.code === "EADDRINUSE") {
+				onPortInUse?.(port);
+				port++;
+				continue;
+			}
+			throw e;
+		}
+	}
+
+	throw new Error(
+		`Failed to start ${serverName} - all ports in range ${portRange[0]}-${portRange[1]} are in use`,
+	);
+}

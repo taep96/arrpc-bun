@@ -293,7 +293,6 @@ export default class IPCServer {
 
 				socket.on("request", this.onMessage.bind(this, extSocket));
 
-				extSocket._send = extSocket.send;
 				extSocket.send = (msg: RPCMessage) => {
 					if (env[ENV_DEBUG]) log.info("sending", msg);
 					socket.write(encode(IPCMessageType.FRAME, msg));

@@ -15,7 +15,7 @@ import { ignoreList } from "../ignore-list";
 import { isHyperVEnabled } from "../platform";
 import { stateManager } from "../state";
 import type { ExtendedWebSocket, Handlers, RPCMessage } from "../types";
-import { createLogger, getPortRange } from "../utils";
+import { createLogger, getPortRange, tryBindToPort } from "../utils";
 
 const log = createLogger("websocket", ...WEBSOCKET_COLOR);
 
@@ -48,17 +48,15 @@ export default class WSServer {
 
 		const hostname = env[ENV_WEBSOCKET_HOST] || DEFAULT_LOCALHOST;
 
-		let port = portRange[0];
-		let server: Server<unknown> | undefined;
-
-		while (port <= portRange[1]) {
-			if (env[ENV_DEBUG]) log.info("trying port", port);
-
-			try {
-				server = serve({
-					port,
+		const { server, port } = tryBindToPort({
+			portRange,
+			serverName: "WebSocket server",
+			onPortInUse: (p) => log.info(p, "in use!"),
+			tryBind: (p) =>
+				serve({
+					port: p,
 					hostname,
-					fetch: (req, server) => {
+					fetch: (req, srv) => {
 						const url = new URL(req.url);
 						const params = url.searchParams;
 						const ver = Number.parseInt(
@@ -107,7 +105,7 @@ export default class WSServer {
 							});
 						}
 
-						const upgraded = server.upgrade(req, {
+						const upgraded = srv.upgrade(req, {
 							data: { clientId, encoding, origin },
 						});
 
@@ -133,28 +131,12 @@ export default class WSServer {
 							this.handlers.close(extSocket);
 						},
 					},
-				});
+				}),
+		});
 
-				log.info("listening on", port);
-				this.server = server;
-				stateManager.setServer("websocket", { host: hostname, port });
-				break;
-			} catch (e) {
-				const error = e as { code?: string; message?: string };
-				if (error.code === "EADDRINUSE") {
-					log.info(port, "in use!");
-					port++;
-					continue;
-				}
-				throw e;
-			}
-		}
-
-		if (!this.server) {
-			throw new Error(
-				`Failed to start WebSocket server - all ports in range ${portRange[0]}-${portRange[1]} are in use`,
-			);
-		}
+		log.info("listening on", port);
+		this.server = server;
+		stateManager.setServer("websocket", { host: hostname, port });
 	}
 
 	getPort(): number | undefined {

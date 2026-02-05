@@ -13,7 +13,7 @@ import { ignoreList } from "./ignore-list";
 import { isHyperVEnabled } from "./platform";
 import { stateManager } from "./state";
 import type { ActivityPayload, BridgeMessage } from "./types";
-import { createLogger, getPortRange } from "./utils";
+import { createLogger, getPortRange, tryBindToPort } from "./utils";
 
 const log = createLogger("bridge", ...BRIDGE_COLOR);
 
@@ -139,7 +139,7 @@ export async function init(): Promise<void> {
 		log.info("Hyper-V detected, using extended port range");
 	}
 
-	let startPort = portRange[0];
+	let startPort: number | undefined;
 	if (env[ENV_BRIDGE_PORT]) {
 		const envPort = Number.parseInt(env[ENV_BRIDGE_PORT], 10);
 		if (Number.isNaN(envPort)) {
@@ -150,15 +150,14 @@ export async function init(): Promise<void> {
 
 	const hostname = env[ENV_BRIDGE_HOST] || DEFAULT_LOCALHOST;
 
-	let port = startPort;
-	let server: Server<unknown> | undefined;
-
-	while (port <= portRange[1]) {
-		if (env[ENV_DEBUG]) log.info("trying port", port);
-
-		try {
-			server = serve({
-				port,
+	const { server, port } = tryBindToPort({
+		portRange,
+		startPort,
+		serverName: "bridge server",
+		onPortInUse: (p) => log.info(p, "in use!"),
+		tryBind: (p) =>
+			serve({
+				port: p,
 				hostname,
 				fetch(req, srv) {
 					const upgraded = srv.upgrade(req, { data: {} });
@@ -199,26 +198,10 @@ export async function init(): Promise<void> {
 						clients.delete(ws);
 					},
 				},
-			});
+			}),
+	});
 
-			bridgeServer = server;
-			log.info("listening on", port);
-			stateManager.setServer("bridge", { host: hostname, port });
-			break;
-		} catch (e) {
-			const error = e as { code?: string; message?: string };
-			if (error.code === "EADDRINUSE") {
-				log.info(port, "in use!");
-				port++;
-				continue;
-			}
-			throw e;
-		}
-	}
-
-	if (!server) {
-		throw new Error(
-			`Failed to start bridge server - all ports in range ${portRange[0]}-${portRange[1]} are in use`,
-		);
-	}
+	bridgeServer = server;
+	log.info("listening on", port);
+	stateManager.setServer("bridge", { host: hostname, port });
 }

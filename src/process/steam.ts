@@ -240,7 +240,11 @@ export async function resolveSteamApp(
 				return lookup;
 			});
 		}
-		return null;
+
+		await steamAppLookupPromise;
+		if (!steamAppLookup) {
+			return null;
+		}
 	}
 
 	let normalizedPath = processPath;
