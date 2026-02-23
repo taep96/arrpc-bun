@@ -156,11 +156,11 @@ export async function init(): Promise<void> {
 		serverName: "bridge server",
 		onPortInUse: (p) => log.info(p, "in use!"),
 		tryBind: (p) =>
-			serve<undefined>({
+			serve<unknown>({
 				port: p,
 				hostname,
 				fetch(req, srv) {
-					const upgraded = srv.upgrade(req);
+					const upgraded = srv.upgrade(req, { data: undefined });
 					if (!upgraded) {
 						return new Response("WebSocket upgrade failed", {
 							status: 400,
